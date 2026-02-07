@@ -8,58 +8,56 @@ app.use(cors());
 
 const server = http.createServer(app);
 const io = new Server(server, {
-    cors: { origin: "*", methods: ["GET", "POST"] }
+    cors: {
+        origin: "*",
+        methods: ["GET", "POST"]
+    }
 });
 
-const PORT = process.env.PORT || 3000;
-const THREE_HOURS = 3 * 60 * 60 * 1000; 
-let messages = []; 
+// Henüz süresi dolmamış mesajlar (RAM)
+let messageHistory = [];
 
 io.on('connection', (socket) => {
+    // 1–999 arası anonim numara
     const anonimNo = Math.floor(Math.random() * 999) + 1;
     const userName = `Anonim ${anonimNo}`;
-    socket.userName = userName;
-    
+
+    // Kullanıcı bağlanınca eski mesajları gönder
+    socket.emit('chat history', messageHistory);
     socket.emit('set username', userName);
 
-    // Yeni bağlanana sadece son 3 saatlik mesajları gönder
-    const simdi = Date.now();
-    const tazeMesajlar = messages.filter(m => simdi - m.timestamp < THREE_HOURS);
-    socket.emit('all-messages', tazeMesajlar);
+    socket.on('chat message', (msgText) => {
+        if (!msgText || !msgText.trim()) return;
 
-    socket.on('send-message', (text) => {
-        const newMessage = {
-            id: Math.random().toString(36).substr(2, 9),
-            user: socket.userName,
-            text: text,
-            // TÜRKİYE SAATİNE SABİTLEME (UTC+3)
-            time: new Date().toLocaleTimeString('tr-TR', { 
-                timeZone: 'Europe/Istanbul', 
-                hour: '2-digit', 
-                minute: '2-digit' 
-            }),
-            timestamp: Date.now() 
+        const messageData = {
+            id: Math.random().toString(36).substring(2, 11),
+            user: userName,
+            text: msgText,
+            time: new Date().toLocaleTimeString('tr-TR', {
+                hour: '2-digit',
+                minute: '2-digit',
+                timeZone: 'Europe/Istanbul' // 🔥 KRİTİK SATIR
+            })
         };
-        
-        messages.push(newMessage);
-        io.emit('receive-message', newMessage);
+
+        // Mesajı kaydet ve herkese gönder
+        messageHistory.push(messageData);
+        io.emit('chat message', messageData);
+
+        // 3 SAAT SONRA SİL (10.800.000 ms)
+        setTimeout(() => {
+            messageHistory = messageHistory.filter(m => m.id !== messageData.id);
+            io.emit('delete message', messageData.id);
+            console.log(`Mesaj silindi: ${messageData.id}`);
+        }, 3 * 60 * 60 * 1000);
+    });
+
+    socket.on('disconnect', () => {
+        console.log(`${userName} ayrıldı`);
     });
 });
 
-// OTOMATİK SÜPÜRGE (Her dakika çalışır)
-setInterval(() => {
-    const simdi = Date.now();
-    const eskiSayi = messages.length;
-
-    // 3 saati dolanları temizle
-    messages = messages.filter(msg => (simdi - msg.timestamp) < THREE_HOURS);
-
-    if (messages.length < eskiSayi) {
-        io.emit('all-messages', messages);
-        console.log("Süresi dolan mesajlar temizlendi.");
-    }
-}, 60000);
-
+const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-    console.log(`Sunucu TR saatine göre ayarlandı ve aktif.`);
+    console.log(`Sunucu ${PORT} portunda aktif (TR saat dilimi).`);
 });
