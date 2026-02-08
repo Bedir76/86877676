@@ -6,7 +6,18 @@ const cors = require('cors');
 const app = express();
 app.use(cors());
 
+/* 🔥 PING ROUTE — BUNU CRON VURACAK */
+app.get('/ping', (req, res) => {
+    res.status(200).send('pong');
+});
+
+/* İstersen ana sayfa */
+app.get('/', (req, res) => {
+    res.send('Socket.IO Server Aktif 🚀');
+});
+
 const server = http.createServer(app);
+
 const io = new Server(server, {
     cors: {
         origin: "*",
@@ -14,15 +25,15 @@ const io = new Server(server, {
     }
 });
 
-// Henüz süresi dolmamış mesajlar (RAM)
+/* RAM’de mesajlar */
 let messageHistory = [];
 
 io.on('connection', (socket) => {
-    // 1–999 arası anonim numara
     const anonimNo = Math.floor(Math.random() * 999) + 1;
     const userName = `Anonim ${anonimNo}`;
 
-    // Kullanıcı bağlanınca eski mesajları gönder
+    console.log(`${userName} bağlandı`);
+
     socket.emit('chat history', messageHistory);
     socket.emit('set username', userName);
 
@@ -36,15 +47,14 @@ io.on('connection', (socket) => {
             time: new Date().toLocaleTimeString('tr-TR', {
                 hour: '2-digit',
                 minute: '2-digit',
-                timeZone: 'Europe/Istanbul' // 🔥 KRİTİK SATIR
+                timeZone: 'Europe/Istanbul'
             })
         };
 
-        // Mesajı kaydet ve herkese gönder
         messageHistory.push(messageData);
         io.emit('chat message', messageData);
 
-        // 3 SAAT SONRA SİL (10.800.000 ms)
+        /* 3 saat sonra sil */
         setTimeout(() => {
             messageHistory = messageHistory.filter(m => m.id !== messageData.id);
             io.emit('delete message', messageData.id);
@@ -58,6 +68,6 @@ io.on('connection', (socket) => {
 });
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
-    console.log(`Sunucu ${PORT} portunda aktif (TR saat dilimi).`);
+server.listen(PORT, '0.0.0.0', () => {
+    console.log(`Sunucu ${PORT} portunda çalışıyor`);
 });
